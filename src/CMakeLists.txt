@@ -25,7 +25,12 @@ set(VERSION_INFO_MAINT_VERSION git)
 # Compiler specific setup
 ########################################################################
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -W -Wall")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+
+if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANGCC)
+    add_definitions(-Wall)
+    add_definitions(-Wno-unused)
+endif()
 
 
 ########################################################################
