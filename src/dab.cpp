@@ -3,19 +3,21 @@
 #include <string.h>
 
 #include "dab.h"
+extern "C" {
 #ifdef ENABLE_SPIRAL_VITERBI
 #include "viterbi_spiral.h"
 #else
 #include "viterbi.h"
 #endif
-#include "fic.h"
-#include "misc.h"
+}
+#include "fic.hpp"
+#include "misc.hpp"
 
 void init_dab_state(struct dab_state_t **dab, void* device_state, void (* eti_callback)(uint8_t *eti))
 {
   int i;
 
-  *dab = calloc(sizeof(struct dab_state_t),1);
+  *dab = (struct dab_state_t*)calloc(sizeof(struct dab_state_t),1);
 
   (*dab)->device_state = device_state;
   (*dab)->eti_callback = eti_callback;

@@ -13,7 +13,7 @@ struct wavefinder_t {
 };
 
 int wf_init(struct wavefinder_t* wf);
-int wf_open(struct wavefinder_t* wf, char* filename);
+int wf_open(struct wavefinder_t* wf, const char* filename);
 void wf_tune(struct wavefinder_t* wf, int freq_khz);
 int wf_read_frame(struct wavefinder_t* wf, struct demapped_transmission_frame_t *tf);
 

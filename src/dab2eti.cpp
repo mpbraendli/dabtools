@@ -29,8 +29,10 @@ david.may.muc@googlemail.com
 #include <rtl-sdr.h>
 #include <unistd.h>
 #include "dab.h"
+extern "C" {
 #include "input_sdr.h"
 #include "input_wf.h"
+}
 
 /* Wavefinder state */
 static struct wavefinder_t  wf;
@@ -57,10 +59,10 @@ static void sighandler(int signum)
   rtlsdr_cancel_async(dev);
 }
 
-static void *demod_thread_fn(void *arg)
+static void *demod_thread_fn(void *ptr)
 {
-  struct dab_state_t *dab = arg;
-  struct sdr_state_t *sdr = dab->device_state;
+  struct dab_state_t *dab = (struct dab_state_t*)ptr;
+  struct sdr_state_t *sdr = (struct sdr_state_t*)dab->device_state;
   int i,j;
 
   while (!do_exit) {
@@ -116,7 +118,7 @@ static void *demod_thread_fn(void *arg)
 
 static void rtlsdr_callback(uint8_t *buf, uint32_t len, void *ctx)
 {
-  struct sdr_state_t *sdr = ctx;
+  struct sdr_state_t *sdr = (struct sdr_state_t*)ctx;
   int dr_val;
   if (do_exit) {
     return;}
@@ -250,7 +252,7 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
 
 static int do_wf_decode(struct dab_state_t* dab, int frequency)
 {
-  struct wavefinder_t *wf = dab->device_state;
+  struct wavefinder_t *wf = (struct wavefinder_t*)dab->device_state;
   int displayed_lock = 0;
 
   wf_init(wf);

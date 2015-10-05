@@ -46,7 +46,7 @@ int wf_init(struct wavefinder_t* wf)
   return wfsyncinit();
 }
 
-int wf_open(struct wavefinder_t* wf, char* filename)
+int wf_open(struct wavefinder_t* wf, const char* filename)
 {
   wf->fd = open(filename, O_RDWR);
   if (wf->fd < 0) {

@@ -4,15 +4,22 @@
 #include <string.h>
 
 #include "dab.h"
-#include "fic.h"
-#include "depuncture.h"
+#include "fic.hpp"
+#include "depuncture.hpp"
+
+extern "C" {
 #ifdef ENABLE_SPIRAL_VITERBI
 #include "viterbi_spiral.h"
 #else
 #include "viterbi.h"
 #endif
-#include "misc.h"
+}
+
+#include "misc.hpp"
+
+extern "C" {
 #include "dab_tables.h"
+}
 
 static int dump_buffer(char *name, char *buf, int blen)
 {

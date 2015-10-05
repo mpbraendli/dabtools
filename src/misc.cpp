@@ -3,13 +3,15 @@
 #include <unistd.h>
 
 #include "dab.h"
-#include "depuncture.h"
+#include "depuncture.hpp"
+extern "C" {
 #ifdef ENABLE_SPIRAL_VITERBI
 #include "viterbi_spiral.h"
 #else
 #include "viterbi.h"
 #endif
-#include "misc.h"
+}
+#include "misc.hpp"
 
 void merge_info(struct ens_info_t* ei, struct tf_info_t *info)
 {

@@ -3,7 +3,7 @@
 ########################################################################
 
 cmake_minimum_required(VERSION 2.8)
-project(dabtools C)
+project(dabtools C CXX)
 
 # Select the release build type by default to get optimization flags
 if(NOT CMAKE_BUILD_TYPE)
@@ -53,20 +53,23 @@ include_directories(${FFTW3_INCLUDE_DIRS})
 ########################################################################
 
 list(APPEND dabtools_sources
-    dab.c
+    dab.cpp
     dab_tables.c
-    depuncture.c
-    fic.c
+    depuncture.cpp
+    fic.cpp
     input_sdr.c
     input_wf.c
-    misc.c
+    misc.cpp
     sdr_fifo.c
 #    sdr_prstab.c
     sdr_sync.c
     wf_maths.c
     wf_prstables.c
     wf_sync.c
-    dab2eti.c
+    dab2eti.cpp
+    conv/ConvEncoder.cpp
+    conv/PuncturingRule.cpp
+    conv/PuncturingEncoder.cpp
     )
 
 if(ENABLE_SPIRAL_VITERBI)
@@ -79,7 +82,6 @@ if(ENABLE_SPIRAL_VITERBI)
         -DENABLE_SPIRAL_VITERBI
         -msse2
         -msse3
-        -std=gnu99
         )
 else()
     list(APPEND dabtools_sources
@@ -88,12 +90,15 @@ else()
 endif()
 
 add_executable(dab2eti ${dabtools_sources})
-add_executable(eti2mpa eti2mpa.c)
+#add_executable(eti2mpa eti2mpa.c)
 target_link_libraries(dab2eti m ${CMAKE_THREAD_LIBS_INIT} ${FFTW3_LIBRARIES} ${RTLSDR_LIBRARIES})
+
+set_property(TARGET dab2eti PROPERTY CXX_STANDARD 11)
+
 
 install(TARGETS
     dab2eti
-    eti2mpa
+    #eti2mpa
     DESTINATION bin
 )
 
