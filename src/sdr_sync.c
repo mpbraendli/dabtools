@@ -64,7 +64,7 @@ uint32_t dab_coarse_time_sync(int8_t * real, float * filt, uint8_t force_timesyn
     }
   }
   if (minPos)
-  fprintf(stderr,"calculated position of nullsymbol: %f\n",minPos*2);
+      fprintf(stderr,"calculated position of nullsymbol: %u\n", minPos*2);
   return minPos*2;
 }
 
