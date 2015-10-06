@@ -4,8 +4,9 @@
 
 dabtools is work-in-progress set of tools for reception, recording and
 playback of DAB and DAB+ digital radio broadcasts. It currently
-supports the Psion Wavefinder USB DAB tuner and any SDR tuner
-supported by the RTL-SDR project.
+supports the Psion Wavefinder USB DAB tuner, any SDR tuner
+supported by the RTL-SDR project and offers experimental support for
+the HackRF.
 
 It is heavily based on David Crawley's "OpenDAB" software for the
 Psion Wavefinder and David May's "rtl-dab" SDR DAB demodulator, and
@@ -33,9 +34,8 @@ It consists of a set of fixed-size (6144 byte) frames, each containing
 
 ## Hardware support
 
-Note that there is currently no way to specify the device - dab2eti
-will first look for and use a /dev/wavefinder0 device, and if that is
-not found, it will search for RTL-SDR devices.
+The desired device must be given in the command line arguments. See
+the usage screen of dab2eti.
 
 dab2eti on a Wavefinder requires around 51% CPU (on an Intel(R)
 Core(TM)2 Duo CPU E6750 @ 2.66GHz) to decode the BBC National DAB
@@ -46,7 +46,7 @@ and ensemble.
 
 There is an experimental Viterbi decoder (which uses x64 SSE
 instructions, so will only compile for x64) which can be enabled by
-uncommenting the "ENABLE_SPIRAL_VITERBI" line in the Makefile.  Please
+setting the "ENABLE_SPIRAL_VITERBI" option in cmake.  Please
 ensure you do a "make clean" whenever changing this option.
 
 This Viterbi decoder gives a massive performance boost - reducing CPU
@@ -88,11 +88,11 @@ API.
 dab2eti is used to receive an ETI stream, and the frequency is
 specified in Hz.  e.g.
 
-./dab2eti 218640000 > dump.eti
+./dab2eti -w 218640000 > dump.eti
 
 to record a stream or
 
-./dab2eti 218640000 | eti2mpa 2 | madplay -v -
+./dab2eti -w 218640000 | eti2mpa 2 | madplay -v -
 
 to play sub-channel 2 from the ensemble.
 
@@ -110,11 +110,18 @@ which is the gain specified in tenths of a decibel.
 
 e.g. to record an ensemble broadcasting at 218.640MHz with 9dB gain:
 
-./dab2eti 218640000 90 > dump.eti
+./dab2eti -r 218640000 90 > dump.eti
 
 dab2eti will display the list of supported gain values - each tuner
 supports a different set of gain values.
 
+### HackRF
+
+The HackRF source can be selected using
+
+./dab2eti -h 218640000
+
+It apparently doesn't work well yet.
 
 ## Building
 
@@ -122,15 +129,23 @@ dabtools requires librtlsdr and libfftw3.  The former can be found at
 http://sdr.osmocom.org/trac/wiki/rtl-sdr and the latter should be
 available via your distribution's package manage (e.g. libfftw3-dev).
 
+The tools use CMake to create a makefile. Build steps
+
+1. mkdir build
+2. cd build
+3. cmake ..
+4. make
+
 ## Other ETI tools
 
-OpenDigitalRadio maintains a list of other open source ETI tools here:
+Opendigitalradio maintains a list of other open source ETI tools here:
 
 http://wiki.opendigitalradio.org/Ensemble_Transport_Interface
 
 ## Copyright
 
-dabtools is written by Dave Chapman <dave@dchapman.com> 
+dabtools is written by Dave Chapman <dave@dchapman.com>, with
+modifications by Matthias P. Braendli <matthias@mpb.li>
 
 Large parts of the code are copied verbatim (or with trivial
 modifications) from David Crawley's OpenDAB and hence retain his
