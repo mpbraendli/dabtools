@@ -27,7 +27,10 @@ david.may.muc@googlemail.com
 #include <semaphore.h>
 #include <signal.h>
 #include <rtl-sdr.h>
+#include <libhackrf/hackrf.h>
 #include <unistd.h>
+#include <string>
+#include <cmath>
 #include "dab.h"
 extern "C" {
 #include "input_sdr.h"
@@ -40,6 +43,8 @@ static struct wavefinder_t  wf;
 /* RTL-SDR device state */
 static struct sdr_state_t sdr;
 static rtlsdr_dev_t *dev = NULL;
+
+static hackrf_device *hackrf = NULL;
 
 int do_exit = 0;
 
@@ -57,6 +62,23 @@ static void sighandler(int signum)
   fprintf(stderr, "Signal caught, exiting!\n");
   do_exit = 1;
   rtlsdr_cancel_async(dev);
+}
+
+static void hackrf_err(const char* msg, int result) {
+  fprintf(stderr, "%s: %s (%d)\n", msg, hackrf_error_name((enum hackrf_error)result), result);
+}
+
+static void set_center_freq(struct dab_state_t *dab, long frequency)
+{
+  if (dab->device_type == DAB_DEVICE_RTLSDR) {
+    rtlsdr_set_center_freq(dev, frequency);
+  }
+  else if (dab->device_type == DAB_DEVICE_HACKRF) {
+    hackrf_set_freq(hackrf, frequency);
+  }
+  else {
+    abort();
+  }
 }
 
 static void *demod_thread_fn(void *ptr)
@@ -78,30 +100,28 @@ static void *demod_thread_fn(void *ptr)
     int prev_freq = sdr->frequency;
     if (abs(sdr->coarse_freq_shift)>1) {
       if (sdr->coarse_freq_shift<0)
-	sdr->frequency = sdr->frequency -1000;
+        sdr->frequency = sdr->frequency -1000;
       else
-	sdr->frequency = sdr->frequency +1000;
-      
-      rtlsdr_set_center_freq(dev,sdr->frequency);
-      
-    }
-    
-    if (abs(sdr->coarse_freq_shift) ==1) {
-      
-      if (sdr->coarse_freq_shift<0)
-	sdr->frequency = sdr->frequency -rand() % 1000;
-      else
-	sdr->frequency = sdr->frequency +rand() % 1000;
-      
-      rtlsdr_set_center_freq(dev,sdr->frequency);
-      //fprintf(stderr,"new center freq : %i\n",rtlsdr_get_center_freq(dev));
-      
-    } 
-    if (abs(sdr->coarse_freq_shift)<1 && (abs(sdr->fine_freq_shift) > 50)) {
-      sdr->frequency = sdr->frequency + (sdr->fine_freq_shift/3);
-      rtlsdr_set_center_freq(dev,sdr->frequency);
-      //fprintf(stderr,"ffs : %f\n",sdr->fine_freq_shift);
+        sdr->frequency = sdr->frequency +1000;
 
+      set_center_freq(dab, sdr->frequency);
+    }
+
+    if (abs(sdr->coarse_freq_shift) ==1) {
+
+      if (sdr->coarse_freq_shift<0)
+        sdr->frequency = sdr->frequency -rand() % 1000;
+      else
+        sdr->frequency = sdr->frequency +rand() % 1000;
+
+      set_center_freq(dab, sdr->frequency);
+      //fprintf(stderr,"new center freq : %i\n",rtlsdr_get_center_freq(dev));
+
+    }
+    if (abs(sdr->coarse_freq_shift)<1 && (fabs(sdr->fine_freq_shift) > 50)) {
+      sdr->frequency = sdr->frequency + (sdr->fine_freq_shift/3);
+      set_center_freq(dab, sdr->frequency);
+      //fprintf(stderr,"ffs : %f\n",sdr->fine_freq_shift);
     }
 
     //if (sdr->frequency != prev_freq) {
@@ -112,6 +132,31 @@ static void *demod_thread_fn(void *ptr)
       ccount = 0;
       //print_status(dab);
     }
+  }
+  return 0;
+}
+
+static int hackrf_callback(hackrf_transfer* transfer)
+{
+  if (do_exit) {
+    return -1;
+  }
+  if (!transfer) {
+    return -1;
+  }
+
+  struct sdr_state_t *sdr = (struct sdr_state_t*)transfer->rx_ctx;
+
+  size_t len = transfer->valid_length;
+  const uint8_t* buf = transfer->buffer;
+
+  memcpy(sdr->input_buffer,buf,len);
+  sdr->input_buffer_len = len;
+
+  int dr_val;
+  sem_getvalue(&data_ready, &dr_val);
+  if (!dr_val) {
+    sem_post(&data_ready);
   }
   return 0;
 }
@@ -154,69 +199,126 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
   /*---------------------------------------------------
     Looking for device and open connection
     ----------------------------------------------------*/
-  device_count = rtlsdr_get_device_count();
-  if (!device_count) {
-    fprintf(stderr, "No supported devices found.\n");
-    exit(1);
-  }
+  if (dab->device_type == DAB_DEVICE_RTLSDR) {
+    device_count = rtlsdr_get_device_count();
+    if (!device_count) {
+      fprintf(stderr, "No supported devices found.\n");
+      exit(1);
+    }
 
-  fprintf(stderr, "Found %d device(s):\n", device_count);
-  for (i = 0; i < device_count; i++) {
-    rtlsdr_get_device_usb_strings(i, vendor, product, serial);
-    fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
-  }
-  fprintf(stderr, "\n");
-  
-  fprintf(stderr, "Using device %d: %s\n",dev_index, rtlsdr_get_device_name(dev_index));
-  
-  r = rtlsdr_open(&dev, dev_index);
-  if (r < 0) {
-    fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev_index);
-    exit(1);
-  }
+    fprintf(stderr, "Found %d device(s):\n", device_count);
+    for (i = 0; i < device_count; i++) {
+      rtlsdr_get_device_usb_strings(i, vendor, product, serial);
+      fprintf(stderr, "  %d:  %s, %s, SN: %s\n", i, vendor, product, serial);
+    }
+    fprintf(stderr, "\n");
 
-  int gains[100];
-  int count = rtlsdr_get_tuner_gains(dev, gains);
-  fprintf(stderr, "Supported gain values (%d): ", count);
-  for (i = 0; i < count; i++)
-    fprintf(stderr, "%.1f ", gains[i] / 10.0);
-  fprintf(stderr, "\n");
+    fprintf(stderr, "Using device %d: %s\n",dev_index, rtlsdr_get_device_name(dev_index));
+
+    r = rtlsdr_open(&dev, dev_index);
+    if (r < 0) {
+      fprintf(stderr, "Failed to open rtlsdr device #%d.\n", dev_index);
+      exit(1);
+    }
+
+    int gains[100];
+    int count = rtlsdr_get_tuner_gains(dev, gains);
+    fprintf(stderr, "Supported gain values (%d): ", count);
+    for (i = 0; i < count; i++)
+      fprintf(stderr, "%.1f ", gains[i] / 10.0);
+    fprintf(stderr, "\n");
+  }
+  else if (dab->device_type == DAB_DEVICE_HACKRF) {
+    r = hackrf_init();
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_init() failed", r);
+      return EXIT_FAILURE;
+    }
+
+    const char* serial_number = nullptr;
+    r = hackrf_open_by_serial(serial_number, &hackrf);
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_open() failed", r);
+      return EXIT_FAILURE;
+    }
+  }
+  else
+  {
+    r = -1;
+    return EXIT_FAILURE;
+  }
 
   /*-------------------------------------------------
     Set Frequency & Sample Rate
     --------------------------------------------------*/
-  /* Set the sample rate */
-  r = rtlsdr_set_sample_rate(dev, samp_rate);
-  if (r < 0)
-    fprintf(stderr, "WARNING: Failed to set sample rate.\n");
-  
-  /* Set the frequency */
-  r = rtlsdr_set_center_freq(dev, sdr.frequency);
-  if (r < 0)
-    fprintf(stderr, "WARNING: Failed to set center freq.\n");
-  else
-    fprintf(stderr, "Tuned to %u Hz.\n", sdr.frequency);
+  if (dab->device_type == DAB_DEVICE_RTLSDR) {
+    /* Set the sample rate */
+    r = rtlsdr_set_sample_rate(dev, samp_rate);
+    if (r < 0)
+      fprintf(stderr, "WARNING: Failed to set sample rate.\n");
 
-  /*------------------------------------------------
-    Setting gain  
-    -------------------------------------------------*/
-  if (gain == AUTO_GAIN) {
-    r = rtlsdr_set_tuner_gain_mode(dev, 0);
-  } else {
-    r = rtlsdr_set_tuner_gain_mode(dev, 1);
-    r = rtlsdr_set_tuner_gain(dev, gain);
+    /* Set the frequency */
+    r = rtlsdr_set_center_freq(dev, sdr.frequency);
+    if (r < 0)
+      fprintf(stderr, "WARNING: Failed to set center freq.\n");
+    else
+      fprintf(stderr, "Tuned to %u Hz.\n", sdr.frequency);
+
+    /*------------------------------------------------
+      Setting gain  
+      -------------------------------------------------*/
+    if (gain == AUTO_GAIN) {
+      r = rtlsdr_set_tuner_gain_mode(dev, 0);
+    } else {
+      r = rtlsdr_set_tuner_gain_mode(dev, 1);
+      r = rtlsdr_set_tuner_gain(dev, gain);
+    }
+    if (r != 0) {
+      fprintf(stderr, "WARNING: Failed to set tuner gain.\n");
+    } else if (gain == AUTO_GAIN) {
+      fprintf(stderr, "Tuner gain set to automatic.\n");
+    } else {
+      fprintf(stderr, "Tuner gain set to %0.2f dB.\n", gain/10.0);
+    }
+    /*-----------------------------------------------
+      /  Reset endpoint (mandatory) 
+      ------------------------------------------------*/
+    r = rtlsdr_reset_buffer(dev);
   }
-  if (r != 0) {
-    fprintf(stderr, "WARNING: Failed to set tuner gain.\n");
-  } else if (gain == AUTO_GAIN) {
-    fprintf(stderr, "Tuner gain set to automatic.\n");
-  } else {
-    fprintf(stderr, "Tuner gain set to %0.2f dB.\n", gain/10.0);
+  else if (dab->device_type == DAB_DEVICE_HACKRF) {
+    int sample_rate_hz = samp_rate;
+    fprintf(stderr, "call hackrf_sample_rate_set(%u Hz/%.03f MHz)\n", sample_rate_hz, (sample_rate_hz/1e6));
+    int r = hackrf_set_sample_rate_manual(hackrf, sample_rate_hz, 1);
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_sample_rate_set() failed", r);
+      return EXIT_FAILURE;
+    }
+
+    const int default_baseband_filter_bandwidth = 5000000; /* 5MHz default */
+    int baseband_filter_bw_hz = default_baseband_filter_bandwidth;
+    fprintf(stderr, "call hackrf_baseband_filter_bandwidth_set(%d Hz/%.03f MHz)\n",
+        baseband_filter_bw_hz, ((float)baseband_filter_bw_hz/1e6));
+    r = hackrf_set_baseband_filter_bandwidth(hackrf, baseband_filter_bw_hz);
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_baseband_filter_bandwidth_set()", r);
+      return EXIT_FAILURE;
+    }
+
+    unsigned int lna_gain=8, vga_gain=20, txvga_gain=0;
+    r = hackrf_set_vga_gain(hackrf, vga_gain);
+    r |= hackrf_set_lna_gain(hackrf, lna_gain);
+
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_vga gain/lna gain", r);
+      return EXIT_FAILURE;
+    }
+
+    r = hackrf_set_freq(hackrf, sdr.frequency);
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_set_freq()", r);
+      return EXIT_FAILURE;
+    }
   }
-  /*-----------------------------------------------
-  /  Reset endpoint (mandatory) 
-  ------------------------------------------------*/
-  r = rtlsdr_reset_buffer(dev);
   /*-----------------------------------------------
   / Signal handler
   ------------------------------------------------*/
@@ -237,16 +339,58 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
   //dab_fic_parser_init(&sinfo);
   //dab_analyzer_init(&ana);
   pthread_create(&demod_thread, NULL, demod_thread_fn, (void *)(dab));
-  rtlsdr_read_async(dev, rtlsdr_callback, (void *)(&sdr),
-			      DEFAULT_ASYNC_BUF_NUMBER, DEFAULT_BUF_LENGTH);
+  if (dab->device_type == DAB_DEVICE_RTLSDR) {
+    rtlsdr_read_async(dev, rtlsdr_callback, (void *)(&sdr),
+        DEFAULT_ASYNC_BUF_NUMBER, DEFAULT_BUF_LENGTH);
+  }
+  else if (dab->device_type == DAB_DEVICE_HACKRF) {
+    r = hackrf_start_rx(hackrf, hackrf_callback, (void *)(&sdr));
+
+    if( r != HACKRF_SUCCESS ) {
+      hackrf_err("hackrf_start_x()", r);
+      return EXIT_FAILURE;
+    }
+
+    while( ((r=hackrf_is_streaming(hackrf)) == HACKRF_TRUE) &&
+        (do_exit == false) ) {
+      sleep(1);
+    }
+    hackrf_err("hackrf_is_streaming", r);
+  }
+
 
   if (do_exit) {
     fprintf(stderr, "\nUser cancel, exiting...\n");}
   else {
     fprintf(stderr, "\nLibrary error %d, exiting...\n", r);}
-  rtlsdr_cancel_async(dev);
-  //dab_demod_close(&dab);
-  rtlsdr_close(dev);
+  if (dab->device_type == DAB_DEVICE_RTLSDR) {
+    rtlsdr_cancel_async(dev);
+    //dab_demod_close(&dab);
+    rtlsdr_close(dev);
+  }
+  else if (dab->device_type == DAB_DEVICE_HACKRF) {
+    if (hackrf != NULL)
+    {
+      r = hackrf_stop_rx(hackrf);
+      if( r != HACKRF_SUCCESS ) {
+        hackrf_err("hackrf_stop_rx() failed", r);
+      }
+      else {
+        fprintf(stderr, "hackrf_stop_rx() done\n");
+      }
+
+      r = hackrf_close(hackrf);
+      if( r != HACKRF_SUCCESS )
+      {
+        hackrf_err("hackrf_close() failed", r);
+      }
+      else {
+        fprintf(stderr, "hackrf_close() done\n");
+      }
+    }
+
+    hackrf_exit();
+  }
   return 1;
 }
 
@@ -275,7 +419,10 @@ static int do_wf_decode(struct dab_state_t* dab, int frequency)
 
 void usage(void)
 {
-  fprintf(stderr,"Usage: dab2eti frequency [gain]\n");
+  fprintf(stderr,"Usage: dab2eti (-r|-h) frequency [gain]\n");
+  fprintf(stderr,"       -w selects wavefinder\n");
+  fprintf(stderr,"       -r selects rtlsdr\n");
+  fprintf(stderr,"       -h selects hackrf\n");
 }
 
 int main(int argc, char* argv[])
@@ -284,21 +431,38 @@ int main(int argc, char* argv[])
   int gain = AUTO_GAIN;
   struct dab_state_t* dab;
 
-  if ((argc < 2) || (argc > 3)) {
+  if ((argc < 3) || (argc > 4)) {
     usage();
     return 1;
   }
 
-  frequency = atoi(argv[1]);
-  if (argc > 2) { gain = atoi(argv[2]); }
+  frequency = atoi(argv[2]);
+  if (argc > 3) { gain = atoi(argv[3]); }
 
-  if (wf_open(&wf,"/dev/wavefinder0") >= 0) {
-    init_dab_state(&dab,&wf,eti_callback);
-    dab->device_type = DAB_DEVICE_WAVEFINDER;
-    do_wf_decode(dab,frequency);
-  } else {
+  std::string device_arg(argv[1]);
+
+  if (device_arg == "-w") {
+    if (wf_open(&wf,"/dev/wavefinder0") >= 0) {
+      init_dab_state(&dab,&wf,eti_callback);
+      dab->device_type = DAB_DEVICE_WAVEFINDER;
+      do_wf_decode(dab,frequency);
+    }
+    else {
+      fprintf(stderr, "Could not open wavefinder\n");
+    }
+  }
+  else if (device_arg == "-r") {
     init_dab_state(&dab,&sdr,eti_callback);
     dab->device_type = DAB_DEVICE_RTLSDR;
     do_sdr_decode(dab,frequency,gain);
+  }
+  else if (device_arg == "-h") {
+    init_dab_state(&dab,&sdr,eti_callback);
+    dab->device_type = DAB_DEVICE_HACKRF;
+    do_sdr_decode(dab,frequency,gain);
+  }
+  else {
+    usage();
+    return 1;
   }
 }

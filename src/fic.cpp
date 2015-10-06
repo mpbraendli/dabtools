@@ -203,9 +203,9 @@ void fic_decode(struct dab_state_t *dab, struct demapped_transmission_frame_t *t
         tf->fibs.ok_count++;
         //fprintf(stderr,"CRC OK in fib %d\n",fib);
       } else {
-        //fprintf(stderr,"CRC error in fib %d:",fib);
+        fprintf(stderr,"CRC error in fib %d:",fib);
         //for (k=0;k<32;k++) { fprintf(stderr," %02x",tf->fibs.FIB[fib][k]); }
-        //fprintf(stderr,"\n");
+        fprintf(stderr,"\n");
       }
       fib++;
     }

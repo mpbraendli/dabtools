@@ -3,6 +3,7 @@
 #include <unistd.h>
 
 #include "dab.h"
+#include "ber.hpp"
 #include "depuncture.hpp"
 extern "C" {
 #ifdef ENABLE_SPIRAL_VITERBI
@@ -262,6 +263,12 @@ void create_eti(struct dab_state_t* dab)
       obytes = ((bits / 8) + 7) & 0xfff8; /* Round up to multiple of 64 bits (8 bytes) */
 
       viterbi(dab->v, dpbuf, eti + e, bits);
+      ber_calc(
+              info->subchans[i].id,
+              *sc,
+              dpbuf, obytes,
+              eti + e, obytes);
+
 
       dab_descramble_bytes(eti + e, obytes);
 

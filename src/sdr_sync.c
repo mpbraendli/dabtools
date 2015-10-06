@@ -63,7 +63,8 @@ uint32_t dab_coarse_time_sync(int8_t * real, float * filt, uint8_t force_timesyn
       minPos = j*10;
     }
   }
-  //fprintf(stderr,"calculated position of nullsymbol: %f",minPos*2);
+  if (minPos)
+  fprintf(stderr,"calculated position of nullsymbol: %f\n",minPos*2);
   return minPos*2;
 }
 
@@ -190,7 +191,7 @@ int32_t dab_fine_time_sync(fftw_complex * frame){
   
 
 
-#if dbg
+#if 1
   fprintf(stderr,"Fine time shift: %d\n",maxPos);
 #endif
   if (maxPos<1536/2) {
@@ -256,6 +257,7 @@ int32_t dab_coarse_freq_sync_2(fftw_complex * symbols){
   //fprintf(stderr,"MAXPOS %d\n",global_max_pos);
   return global_max_pos;
 }
+
 double dab_fine_freq_corr(fftw_complex * dab_frame,int32_t fine_timeshift){
   fftw_complex *left;
   fftw_complex *right;
@@ -292,7 +294,7 @@ double dab_fine_freq_corr(fftw_complex * dab_frame,int32_t fine_timeshift){
   //printf("\n%f\n",angle[0]);
 
   ffs = mean / (2 * M_PI) * 1000;
-  //printf("\n%f\n",ffs);
+  fprintf(stderr, "FFS %f\n",ffs);
 
   fftw_free(left);
   fftw_free(right);

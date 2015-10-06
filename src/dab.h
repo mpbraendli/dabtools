@@ -6,6 +6,7 @@
 enum device_type_t {
   DAB_DEVICE_WAVEFINDER,
   DAB_DEVICE_RTLSDR,
+  DAB_DEVICE_HACKRF,
 };
 
 /* A demapped transmission frame represents a transmission frame in

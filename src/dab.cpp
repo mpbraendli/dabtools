@@ -40,9 +40,9 @@ void dab_process_frame(struct dab_state_t *dab)
 
   fic_decode(dab, &dab->tfs[dab->tfidx]);
   if (dab->tfs[dab->tfidx].fibs.ok_count > 0) {
-    //fprintf(stderr,"Decoded FIBs - ok_count=%d\n",dab->tfs[dab->tfidx].fibs.ok_count);
+    fprintf(stderr,"Decoded FIBs - ok_count=%d\n",dab->tfs[dab->tfidx].fibs.ok_count);
     fib_decode(&dab->tf_info,&dab->tfs[dab->tfidx].fibs,12);
-    //dump_tf_info(&dab->tf_info);
+    dump_tf_info(&dab->tf_info);
   }
 
   if (dab->tfs[dab->tfidx].fibs.ok_count == 12) {

@@ -43,6 +43,9 @@ find_package(Threads REQUIRED)
 # rtlsdr
 pkg_check_modules(RTLSDR librtlsdr REQUIRED)
 include_directories(${RTLSDR_INCLUDE_DIRS})
+# hackrf
+pkg_check_modules(HACKRF libhackrf REQUIRED)
+include_directories(${HACKRF_INCLUDE_DIRS})
 # fftw3
 pkg_check_modules(FFTW3 fftw3 REQUIRED )
 include_directories(${FFTW3_INCLUDE_DIRS})
@@ -70,6 +73,8 @@ list(APPEND dabtools_sources
     conv/ConvEncoder.cpp
     conv/PuncturingRule.cpp
     conv/PuncturingEncoder.cpp
+    conv/SubchannelSource.cpp
+    ber.cpp
     )
 
 if(ENABLE_SPIRAL_VITERBI)
@@ -91,7 +96,7 @@ endif()
 
 add_executable(dab2eti ${dabtools_sources})
 #add_executable(eti2mpa eti2mpa.c)
-target_link_libraries(dab2eti m ${CMAKE_THREAD_LIBS_INIT} ${FFTW3_LIBRARIES} ${RTLSDR_LIBRARIES})
+target_link_libraries(dab2eti m ${CMAKE_THREAD_LIBS_INIT} ${FFTW3_LIBRARIES} ${RTLSDR_LIBRARIES} ${HACKRF_LIBRARIES})
 
 set_property(TARGET dab2eti PROPERTY CXX_STANDARD 11)
 
