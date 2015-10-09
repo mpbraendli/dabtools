@@ -44,7 +44,17 @@ static struct wavefinder_t  wf;
 static struct sdr_state_t sdr;
 static rtlsdr_dev_t *dev = NULL;
 
+/* HackRF device state */
 static hackrf_device *hackrf = NULL;
+static uint32_t num_saturated = 0; // Number of saturated samples in the last buffer
+static uint32_t num_low_power = 0; // Number of samples in the last buffer with low power
+static unsigned int hackrf_lna_gain=8; // 8dB steps
+const unsigned int hackrf_lna_gain_min = 0;
+const unsigned int hackrf_lna_gain_max = 40;
+
+static unsigned int hackrf_vga_gain=2; // 2dB steps
+const unsigned int hackrf_vga_gain_min = 0;
+const unsigned int hackrf_vga_gain_max = 62;
 
 int do_exit = 0;
 
@@ -150,8 +160,23 @@ static int hackrf_callback(hackrf_transfer* transfer)
   size_t len = transfer->valid_length;
   const uint8_t* buf = transfer->buffer;
 
+  if (len > DEFAULT_BUF_LENGTH) abort();
   memcpy(sdr->input_buffer,buf,len);
   sdr->input_buffer_len = len;
+
+  num_saturated = 0;
+  num_low_power = 0;
+  for (size_t i = 0; i < len; i += 1) {
+
+    int8_t val = buf[i];
+
+    if (val > 125 || val < -125) {
+      num_saturated ++;
+    }
+    if (val > -5 && val < 5) {
+      num_low_power ++;
+    }
+  }
 
   int dr_val;
   sem_getvalue(&data_ready, &dr_val);
@@ -200,6 +225,8 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
     Looking for device and open connection
     ----------------------------------------------------*/
   if (dab->device_type == DAB_DEVICE_RTLSDR) {
+    sdr.convert_unsigned = 1;
+
     device_count = rtlsdr_get_device_count();
     if (!device_count) {
       fprintf(stderr, "No supported devices found.\n");
@@ -229,6 +256,7 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
     fprintf(stderr, "\n");
   }
   else if (dab->device_type == DAB_DEVICE_HACKRF) {
+    sdr.convert_unsigned = 0;
     r = hackrf_init();
     if( r != HACKRF_SUCCESS ) {
       hackrf_err("hackrf_init() failed", r);
@@ -294,8 +322,8 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
       return EXIT_FAILURE;
     }
 
-    const int default_baseband_filter_bandwidth = 5000000; /* 5MHz default */
-    int baseband_filter_bw_hz = default_baseband_filter_bandwidth;
+    /* possible settings 1.75/2.5/3.5/5/5.5/6/7/8/9/10/12/14/15/20/24/28 */
+    int baseband_filter_bw_hz = 2500000;
     fprintf(stderr, "call hackrf_baseband_filter_bandwidth_set(%d Hz/%.03f MHz)\n",
         baseband_filter_bw_hz, ((float)baseband_filter_bw_hz/1e6));
     r = hackrf_set_baseband_filter_bandwidth(hackrf, baseband_filter_bw_hz);
@@ -304,9 +332,8 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
       return EXIT_FAILURE;
     }
 
-    unsigned int lna_gain=8, vga_gain=20, txvga_gain=0;
-    r = hackrf_set_vga_gain(hackrf, vga_gain);
-    r |= hackrf_set_lna_gain(hackrf, lna_gain);
+    r = hackrf_set_vga_gain(hackrf, hackrf_vga_gain);
+    r |= hackrf_set_lna_gain(hackrf, hackrf_lna_gain);
 
     if( r != HACKRF_SUCCESS ) {
       hackrf_err("hackrf_vga gain/lna gain", r);
@@ -354,6 +381,9 @@ static int do_sdr_decode(struct dab_state_t* dab, int frequency, int gain)
     while( ((r=hackrf_is_streaming(hackrf)) == HACKRF_TRUE) &&
         (do_exit == false) ) {
       sleep(1);
+      fprintf(stderr, "samples: low: %02.2f%%, saturating: %02.2f%%\n",
+          num_low_power * 100.0 / DEFAULT_BUF_LENGTH,
+          num_saturated * 100.0 / DEFAULT_BUF_LENGTH);
     }
     hackrf_err("hackrf_is_streaming", r);
   }
@@ -422,7 +452,7 @@ void usage(void)
   fprintf(stderr,"Usage: dab2eti (-r|-h) frequency [gain]\n");
   fprintf(stderr,"       -w selects wavefinder\n");
   fprintf(stderr,"       -r selects rtlsdr\n");
-  fprintf(stderr,"       -h selects hackrf\n");
+  fprintf(stderr,"       -h selects hackrf, gain is [vga gain] [lna gain]\n");
 }
 
 int main(int argc, char* argv[])
@@ -431,13 +461,12 @@ int main(int argc, char* argv[])
   int gain = AUTO_GAIN;
   struct dab_state_t* dab;
 
-  if ((argc < 3) || (argc > 4)) {
+  if ((argc < 3) || (argc > 5)) {
     usage();
     return 1;
   }
 
   frequency = atoi(argv[2]);
-  if (argc > 3) { gain = atoi(argv[3]); }
 
   std::string device_arg(argv[1]);
 
@@ -452,11 +481,14 @@ int main(int argc, char* argv[])
     }
   }
   else if (device_arg == "-r") {
+    if (argc > 3) { gain = atoi(argv[3]); }
     init_dab_state(&dab,&sdr,eti_callback);
     dab->device_type = DAB_DEVICE_RTLSDR;
     do_sdr_decode(dab,frequency,gain);
   }
   else if (device_arg == "-h") {
+    if (argc > 3) { hackrf_vga_gain = atoi(argv[3]); }
+    if (argc > 4) { hackrf_lna_gain = atoi(argv[4]); }
     init_dab_state(&dab,&sdr,eti_callback);
     dab->device_type = DAB_DEVICE_HACKRF;
     do_sdr_decode(dab,frequency,gain);

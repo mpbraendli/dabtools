@@ -30,6 +30,7 @@ struct sdr_state_t {
   fftw_complex symbols[76][2048];
   /* symbols d-qpsk-ed */
   fftw_complex * symbols_d;
+  int convert_unsigned;
 
   int32_t startup_delay;
   uint8_t force_timesync;

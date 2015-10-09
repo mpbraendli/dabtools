@@ -55,11 +55,18 @@ int sdr_demod(struct demapped_transmission_frame_t *tf, struct sdr_state_t *sdr)
   }
   
 
-
-  /* complex data conversion */
-  for (j=0;j<196608*2;j+=2){
-    sdr->real[j/2]=sdr->buffer[j]-127;
-    sdr->imag[j/2]=sdr->buffer[j+1]-127;
+  if (sdr->convert_unsigned) {
+    /* complex data conversion */
+    for (j=0;j<196608*2;j+=2){
+      sdr->real[j/2]=sdr->buffer[j]-127;
+      sdr->imag[j/2]=sdr->buffer[j+1]-127;
+    }
+  }
+  else {
+    for (j=0;j<196608*2;j+=2){
+      sdr->real[j/2]=sdr->buffer[j];
+      sdr->imag[j/2]=sdr->buffer[j+1];
+    }
   }
 
   /* resetting coarse timeshift */

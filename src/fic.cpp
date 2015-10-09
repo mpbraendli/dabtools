@@ -201,11 +201,13 @@ void fic_decode(struct dab_state_t *dab, struct demapped_transmission_frame_t *t
 
       if (tf->fibs.FIB_CRC_OK[fib]) {
         tf->fibs.ok_count++;
-        //fprintf(stderr,"CRC OK in fib %d\n",fib);
+        fprintf(stderr,"CRC OK in fib %d\n",fib);
       } else {
+        /*
         fprintf(stderr,"CRC error in fib %d:",fib);
-        //for (k=0;k<32;k++) { fprintf(stderr," %02x",tf->fibs.FIB[fib][k]); }
+        for (k=0;k<32;k++) { fprintf(stderr," %02x",tf->fibs.FIB[fib][k]); }
         fprintf(stderr,"\n");
+        */
       }
       fib++;
     }

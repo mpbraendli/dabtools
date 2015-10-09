@@ -45,14 +45,14 @@ int32_t sdr_read_fifo(CircularBuffer * fifo,uint32_t bytes,int32_t shift,uint8_t
   int32_t i=0;
   uint32_t j=0;
   if (shift>0)
-    {
-      for (i=0;i<shift;i++)
-	if(!cbIsEmpty(fifo))
-	  cbRead(fifo,&buffer[i]);
-      for (j=0;j<bytes;j++)
-	if(!cbIsEmpty(fifo))
-	  cbRead(fifo,&buffer[j]);
-    }
+  {
+    for (i=0;i<shift;i++)
+      if(!cbIsEmpty(fifo))
+        cbRead(fifo,&buffer[i]);
+    for (j=0;j<bytes;j++)
+      if(!cbIsEmpty(fifo))
+        cbRead(fifo,&buffer[j]);
+  }
   else {
     for (j=0;j<bytes+shift;j++)
       cbRead(fifo,&buffer[j]);

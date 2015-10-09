@@ -35,12 +35,21 @@ uint32_t dab_coarse_time_sync(int8_t * real, float * filt, uint8_t force_timesyn
   int32_t tnull = 2656; // was 2662? why?
   int32_t j,k;
 
+#if dbg
+  FILE *fh0;
+  fh0 = fopen("coarse_time_input.dat","w+");
+  for (j=0;j<196608;j++) {
+    fprintf(fh0,"%d\n", real[j]);
+  }
+  fclose(fh0);
+#endif
+
   // check for energy in fist tnull samples
   float e=0;
   float threshold=5000;
   for (k=0;k<tnull;k+=10)
     e = e +(float) abs(real[k]);
-#if dbg
+#if 0
   fprintf(stderr,"Energy over nullsymbol: %f\n",e);
 #endif
   if (e<threshold && (force_timesync==0))
@@ -54,6 +63,14 @@ uint32_t dab_coarse_time_sync(int8_t * real, float * filt, uint8_t force_timesyn
     for (k=0;k<tnull;k+=10)
       filt[j/10] = filt[j/10] +(float) abs(real[j+k]);
 
+#if dbg
+  fh0 = fopen("coarse_time_subsampled_filter.dat","w+");
+  for (j=0;j<(196608-tnull)/10;j++) {
+    fprintf(fh0,"%f\n", filt[j]);
+  }
+  fclose(fh0);
+#endif
+
   // finding the minimum in filtered data gives position of null symbol
   float minVal=9999999;
   uint32_t minPos=0;
@@ -63,8 +80,10 @@ uint32_t dab_coarse_time_sync(int8_t * real, float * filt, uint8_t force_timesyn
       minPos = j*10;
     }
   }
+  /*
   if (minPos)
       fprintf(stderr,"calculated position of nullsymbol: %u\n", minPos*2);
+      */
   return minPos*2;
 }
 
